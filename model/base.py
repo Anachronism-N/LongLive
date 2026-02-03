@@ -8,13 +8,14 @@ import torch
 
 from pipeline import SelfForcingTrainingPipeline
 from utils.loss import get_denoising_loss
-from utils.wan_wrapper import WanDiffusionWrapper, WanTextEncoder, WanVAEWrapper
+from utils.wan_wrapper import WanDiffusionWrapper, WanTextEncoder, WanVAEWrapper, WanCLIPEncoder
 
 from utils.debug_option import DEBUG
 
 class BaseModel(nn.Module):
     def __init__(self, args, device):
         super().__init__()
+        self.i2v = getattr(args, "i2v", False)
         self._initialize_models(args, device)
 
         self.device = device
@@ -29,8 +30,13 @@ class BaseModel(nn.Module):
     def _initialize_models(self, args, device):
         self.real_model_name = getattr(args, "real_name", "Wan2.1-T2V-1.3B")
         self.fake_model_name = getattr(args, "fake_name", "Wan2.1-T2V-1.3B")
+        self.generator_name = getattr(args, "generator_name", "Wan2.1-T2V-1.3B")
         self.local_attn_size = getattr(args, "model_kwargs", {}).get("local_attn_size", -1)
-        self.generator = WanDiffusionWrapper(**getattr(args, "model_kwargs", {}), is_causal=True)
+        self.generator = WanDiffusionWrapper(
+            model_name=self.generator_name,
+            **getattr(args, "model_kwargs", {}), 
+            is_causal=True
+        )
         self.generator.model.requires_grad_(True)
 
         self.real_score = WanDiffusionWrapper(model_name=self.real_model_name, is_causal=False)
@@ -39,11 +45,16 @@ class BaseModel(nn.Module):
         self.fake_score = WanDiffusionWrapper(model_name=self.fake_model_name, is_causal=False)
         self.fake_score.model.requires_grad_(True)
 
-        self.text_encoder = WanTextEncoder()
+        self.text_encoder = WanTextEncoder(model_name=self.generator_name)
         self.text_encoder.requires_grad_(False)
 
-        self.vae = WanVAEWrapper()
+        self.vae = WanVAEWrapper(model_name=self.generator_name)
         self.vae.requires_grad_(False)
+
+        # Initialize image encoder for I2V (Image-to-Video)
+        if self.i2v:
+            self.image_encoder = WanCLIPEncoder(model_name=self.generator_name)
+            self.image_encoder.requires_grad_(False)
 
         self.scheduler = self.generator.get_scheduler()
         self.scheduler.timesteps = self.scheduler.timesteps.to(device)

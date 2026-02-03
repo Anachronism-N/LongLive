@@ -1,0 +1,27 @@
+real_name: Wan2.1-Fun-1.3B-InP
+resume_ckpt: outputs/longlive_i2v_train_0125/checkpoint_model_002200
+i2v: true
+num_frame_per_block: 4
+output_folder: outputs/inference_demos_3
+prompt: "a cat running in the grass"
+seed: 42
+guidance_scale: 5.0
+
+model_kwargs:
+  model_name: Wan2.1-Fun-1.3B-InP
+  timestep_shift: 5.0
+  local_attn_size: 12
+  sink_size: 3
+  use_infinite_attention: false
+
+denoising_step_list: [1000, 750, 500, 250]
+warp_denoising_step: true
+context_noise: 0
+
+# LongLive Autoregressive Settings
+# 5 seconds @ 16 fps = 80 frames + 1 ref = 81 frames
+num_output_frames: 21
+inference_iter: -1
+save_with_index: true
+
+vis_video_lengths: [21]

@@ -1,6 +1,11 @@
 __pycache__
+*.pyc
 
 longlive_models
 wan_models
-
-videos
+outputs/
+videos/
+logs/
+.DS_Store
+.vscode/
+*.log

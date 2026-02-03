@@ -33,7 +33,8 @@ def main():
     config.config_name = config_name
     config.logdir = args.logdir
     config.wandb_save_dir = args.wandb_save_dir
-    config.disable_wandb = args.disable_wandb
+    if args.disable_wandb:
+        config.disable_wandb = True
     config.auto_resume = not args.no_auto_resume  # Default to True unless --no-auto-resume is specified
     config.use_one_logger = not args.no_one_logger
 

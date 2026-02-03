@@ -6,7 +6,7 @@ import random
 import re
 from pathlib import Path
 
-from utils.dataset import TextDataset, TwoTextDataset, cycle
+from utils.dataset import TextDataset, TwoTextDataset, cycle, ShardingLMDBDataset
 from utils.distributed import EMA_FSDP, fsdp_wrap, fsdp_state_dict, launch_distributed_job
 from utils.misc import (
     set_seed,
@@ -37,7 +37,10 @@ from pipeline import (
     SwitchCausalInferencePipeline
 )
 from utils.debug_option import DEBUG, LOG_GPU_MEMORY, DEBUG_GRADIENT
-from one_logger_utils import OneLoggerUtils
+try:
+    from one_logger_utils import OneLoggerUtils
+except ImportError:
+    OneLoggerUtils = None
 import time
 
 class Trainer:
@@ -317,6 +320,22 @@ class Trainer:
             wrap_strategy=config.fake_score_fsdp_wrap_strategy
         )
 
+        # FSDP wrap image_encoder for I2V training
+        if self.config.i2v:
+            self.model.image_encoder = fsdp_wrap(
+                self.model.image_encoder,
+                sharding_strategy=config.sharding_strategy,
+                mixed_precision=config.mixed_precision,
+                wrap_strategy=getattr(config, "image_encoder_fsdp_wrap_strategy", "size"),
+                min_num_params=int(5e6),
+                cpu_offload=getattr(config, "image_encoder_cpu_offload", False)
+            )
+            self.model.vae = self.model.vae.to(
+                device=self.device, dtype=torch.bfloat16)
+        else:
+            self.model.vae = self.model.vae.to(
+                device=self.device, dtype=torch.bfloat16 if config.mixed_precision else torch.float32)
+
         self.model.text_encoder = fsdp_wrap(
             self.model.text_encoder,
             sharding_strategy=config.sharding_strategy,
@@ -324,8 +343,6 @@ class Trainer:
             wrap_strategy=config.text_encoder_fsdp_wrap_strategy,
             cpu_offload=getattr(config, "text_encoder_cpu_offload", False)
         )
-        self.model.vae = self.model.vae.to(
-            device=self.device, dtype=torch.bfloat16 if config.mixed_precision else torch.float32)
 
         # if not config.no_visualize or config.load_raw_video:
         #     print("Moving vae to device 2, self.device: ", self.device)
@@ -830,6 +847,11 @@ class Trainer:
         with torch.no_grad():
             conditional_dict = self.model.text_encoder(
                 text_prompts=text_prompts)
+
+            if self.config.i2v and "img" in batch:
+                img = batch["img"].to(self.device)
+                conditional_dict["clip_fea"] = self.model.image_encoder(img)
+                conditional_dict["y"] = self.model.vae.run_vae_encoder(img)
 
             if not getattr(self, "unconditional_dict", None):
                 unconditional_dict = self.model.text_encoder(

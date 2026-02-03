@@ -78,17 +78,23 @@ class DMD(SelfForcingModel):
             - kl_log_dict: a dictionary containing the intermediate tensors for logging.
         """
         # Step 1: Compute the fake score
+        clip_fea = conditional_dict.get("clip_fea")
+        y = conditional_dict.get("y")
         _, pred_fake_image_cond = self.fake_score(
             noisy_image_or_video=noisy_image_or_video,
             conditional_dict=conditional_dict,
-            timestep=timestep
+            timestep=timestep,
+            clip_fea=clip_fea,
+            y=y
         )
 
         if self.fake_guidance_scale != 0.0:
             _, pred_fake_image_uncond = self.fake_score(
                 noisy_image_or_video=noisy_image_or_video,
                 conditional_dict=unconditional_dict,
-                timestep=timestep
+                timestep=timestep,
+                clip_fea=clip_fea,
+                y=y
             )
             pred_fake_image = pred_fake_image_cond + (
                 pred_fake_image_cond - pred_fake_image_uncond
@@ -102,13 +108,17 @@ class DMD(SelfForcingModel):
         _, pred_real_image_cond = self.real_score(
             noisy_image_or_video=noisy_image_or_video,
             conditional_dict=conditional_dict,
-            timestep=timestep
+            timestep=timestep,
+            clip_fea=clip_fea,
+            y=y
         )
 
         _, pred_real_image_uncond = self.real_score(
             noisy_image_or_video=noisy_image_or_video,
             conditional_dict=unconditional_dict,
-            timestep=timestep
+            timestep=timestep,
+            clip_fea=clip_fea,
+            y=y
         )
 
         pred_real_image = pred_real_image_cond + (
@@ -341,7 +351,9 @@ class DMD(SelfForcingModel):
         _, pred_fake_image = self.fake_score(
             noisy_image_or_video=noisy_generated_image,
             conditional_dict=conditional_dict,
-            timestep=critic_timestep
+            timestep=critic_timestep,
+            clip_fea=conditional_dict.get("clip_fea"),
+            y=conditional_dict.get("y")
         )
 
         # Step 3: Compute the denoising loss for the fake critic

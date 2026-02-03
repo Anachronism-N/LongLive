@@ -401,7 +401,7 @@ class XLMRobertaCLIP(nn.Module):
             num_layers=text_layers,
             post_norm=text_post_norm,
             dropout=text_dropout)
-        self.log_scale = nn.Parameter(math.log(1 / 0.07) * torch.ones([]))
+        self.log_scale = nn.Parameter(math.log(1 / 0.07) * torch.ones([1]))
 
     def forward(self, imgs, txt_ids):
         """
@@ -515,8 +515,10 @@ class CLIPModel:
             device=device)
         self.model = self.model.eval().requires_grad_(False)
         logging.info(f'loading {checkpoint_path}')
-        self.model.load_state_dict(
-            torch.load(checkpoint_path, map_location='cpu'))
+        sd = torch.load(checkpoint_path, map_location='cpu')
+        if 'log_scale' in sd and sd['log_scale'].ndim == 0:
+            sd['log_scale'] = sd['log_scale'].reshape(1)
+        self.model.load_state_dict(sd)
 
         # init tokenizer
         self.tokenizer = HuggingfaceTokenizer(

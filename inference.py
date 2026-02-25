@@ -21,10 +21,24 @@ from utils.misc import set_seed
 from utils.memory import gpu, get_cuda_free_memory_gb, DynamicSwapInstaller, log_gpu_memory
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--config_path", type=str, help="Path to the config file")
+parser.add_argument("--config_path", type=str, required=True, help="Path to the config file")
+parser.add_argument("--data_path", type=str, help="Path to prompts file")
+parser.add_argument("--output_folder", type=str, help="Directory to save generated videos")
+parser.add_argument("--num_output_frames", type=int, help="Number of frames to generate")
+parser.add_argument("--num_samples", type=int, help="Number of samples per prompt")
 args = parser.parse_args()
 
 config = OmegaConf.load(args.config_path)
+
+# Override config with CLI arguments if provided
+if args.data_path:
+    config.data_path = args.data_path
+if args.output_folder:
+    config.output_folder = args.output_folder
+if args.num_output_frames:
+    config.num_output_frames = args.num_output_frames
+if args.num_samples:
+    config.num_samples = args.num_samples
 
 # Initialize distributed inference
 if "LOCAL_RANK" in os.environ:

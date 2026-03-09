@@ -86,3 +86,65 @@ LongLive 基于 **DMD (Distribution Matching Distillation)** 算法进行训练�
   - **步骤 2: Temporal denoising loop (时间去噪循环)**。它将长视频切分为多个包含 `num_frame_per_block` 帧的数据块，在时间轴上滑动窗口。
   - **步骤 2.1: Spatial denoising loop (空间去噪循环)**。在每个 Block 内部，按照 `denoising_step_list`（如 [1000, 750, 500, 250]），调用 Transformer 模型进行多步去噪，生成一个块的 Latent。
   - 生成出来的 Block 和历史记录拼接，并存储在 KV Cache 中由下一帧读取使用，最终得到一条拥有上下文依赖关系的长视频。
+
+---
+
+## 5. 算法流程图图解 (Algorithm Flowchart)
+
+以下使用 Mermaid 图表直观展示了 LongLive T2V 训练中 Generator 和 Critic (判别器) 梯度的更新路线及函数调用逻辑：
+
+```mermaid
+graph TD
+    %% 初始化与读取
+    A(train.py) -->|Initialize| B[ScoreDistillationTrainer]
+    B -->|Start loop| C{while step < max_iters}
+    C -->|Next batch| D[Text & Image Encoders]
+    D -->|Get Embeddings| E[fwdbwd_one_step]
+
+    %% Generator 更新路线
+    E -->|1. Generator Training| F[[DMD.generator_loss]]
+    
+    F -->|Step 1: Backward Sim| G[_run_generator]
+    G -->|Streaming KV Cache| G2((Fake Video Latent))
+    
+    F -->|Step 2: Add Noise| H[Simulate diff timestep]
+    G2 --> H
+    
+    H -->|Input| I[Fake Critic Model]
+    H -->|Input| J[Target Teacher Model Wan]
+    
+    I -->|Predict Fake Noise| I2(pred_fake_image)
+    J -->|Predict Real Noise| J2(pred_real_image)
+    
+    I2 --> K[Compute KL Grad]
+    J2 --> K
+    K -->|grad = fake - real| L[MSE Loss]
+    L --> M((Generator Optimizer Step))
+    
+    %% Critic 更新路线
+    M -->|2. Critic Training| N[[DMD.critic_loss]]
+    
+    N -->|Step 1: Backward Sim| O[_run_generator]
+    O -->|Streaming KV Cache| P((Fake Video Latent))
+    
+    N -->|Step 2: Add Noise| Q[Simulate diff timestep]
+    P --> Q
+    Q -->|Input| R[Fake Critic Model]
+    
+    R -->|Predict Noise| S(pred_fake_image)
+    S -->|Denoising Loss function| T[Denoising Loss]
+    
+    T --> U((Critic Optimizer Step))
+    
+    %% 循环收尾
+    U --> V[EMA Update & Save Checkpoint]
+    V --> C
+    
+    %% 样式
+    classDef init fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef func fill:#bbf,stroke:#333,stroke-width:1px;
+    classDef data fill:#dfd,stroke:#333,stroke-width:1px;
+    class A,B init;
+    class F,N,G,O func;
+    class G2,P,I2,J2,S data;
+```
